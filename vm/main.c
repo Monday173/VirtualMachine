@@ -3,17 +3,23 @@
 #include <stdint.h>
 #include <assert.h>
 
+////////////////////////////////////////////////////////////////
 // Macros used by the VM
+
 #define VM_STACK_CAPACITY 1024
 #define VM_MEMORY_CAPACITY 16777216
 
 // Typedefs
 typedef int64_t word;
 
+////////////////////////////////////////////////////////////////
 // Virtual Machine structure
 struct _vm_t {
     word stack[VM_STACK_CAPACITY];
     size_t stack_size;
+
+    word call_stack[VM_STACK_CAPACITY];
+    size_t call_stack_size;
 
     word memory[VM_MEMORY_CAPACITY];
 
@@ -23,7 +29,9 @@ struct _vm_t {
 
 typedef struct _vm_t vm_t;
 
-// Instruction opcode
+////////////////////////////////////////////////////////////////
+// Instructions
+
 enum _instruction_type_t {
     INST_PUSH,
 
@@ -60,17 +68,24 @@ enum _instruction_type_t {
 
     INST_SET_PTR,
     INST_GET_PTR,
+
+    INST_CALL,
+    INST_RETURN,
+
+    INST_EXIT,
 };
 
 typedef enum _instruction_type_t instruction_type_t;
 
-// Instructions
 struct _instruction_t {
     instruction_type_t type;
     word operand;
 };
 
 typedef struct _instruction_t instruction_t;
+
+////////////////////////////////////////////////////////////////
+// Errors
 
 enum _vm_error_status_type_t {
     VM_OK,
@@ -82,8 +97,8 @@ enum _vm_error_status_type_t {
 
 typedef enum _vm_error_status_type_t vm_error_status_type_t;
 
-// Global VM
-vm_t vm = {0};
+////////////////////////////////////////////////////////////////
+// Stack Operations
 
 // Push value onto vm stack
 void vm_push(vm_t* vm, word value) 
@@ -130,13 +145,41 @@ void vm_dump_stack(FILE* stream, vm_t* vm)
     }
 }
 
-// Executes an instruction
+void vm_dump_call(FILE* stream, vm_t* vm) 
+{
+    fprintf(stream, "Call Stack (IP: %ld):\n", vm->instruction_ptr);
+
+    if(vm->call_stack_size > 0) {
+        for(size_t i = vm->call_stack_size; i > 0; --i) {
+            fprintf(stream, "    %ld\n", vm->call_stack[i-1]);
+        }
+    } else {
+        fprintf(stream, "    [empty]\n");
+    }
+}
+
+void vm_call_push(vm_t* vm, word value) 
+{
+    vm->call_stack[vm->call_stack_size] = value;
+    vm->call_stack_size++;
+}
+
+word vm_call_pop(vm_t* vm)
+{
+    vm->call_stack_size--;
+    return vm->call_stack[vm->call_stack_size];
+}
+
+////////////////////////////////////////////////////////////////
+// Execution Functions
+
 vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst) 
 {
     word a, b;
     vm->instruction_ptr++;
 
     switch(inst.type) {
+        // Push value onto the stack
         case INST_PUSH:
             if(vm->stack_size >= VM_STACK_CAPACITY - 1) {
                 return VM_STACK_OVERFLOW;
@@ -145,6 +188,7 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
             vm_push(vm, inst.operand);
             break;
 
+        // Add values on top of stack
         case INST_PLUS:
             if(vm->stack_size < 2) {
                 return VM_STACK_UNDERFLOW;
@@ -152,8 +196,6 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
 
             b = vm_pop(vm);
             a = vm_pop(vm);
-
-            // printf("%d + %d\n", a, b);
 
             if(a + b < a) {
                 vm->carry = 1;
@@ -165,6 +207,7 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
 
             break;
 
+        // Subtract values on top of stack
         case INST_MINUS:
             if(vm->stack_size < 2) {
                 return VM_STACK_UNDERFLOW;
@@ -182,6 +225,7 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
             vm_push(vm, a - b);
             break;
 
+        // Multiply values on top of stack
         case INST_MUL:
             if(vm->stack_size < 2) {
                 return VM_STACK_UNDERFLOW;
@@ -199,6 +243,7 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
             vm_push(vm, a * b);
             break;
 
+        // Divide values on top of stack
         case INST_DIV:
             if(vm->stack_size < 2) {
                 return VM_STACK_UNDERFLOW;
@@ -211,6 +256,7 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
             vm_push(vm, a / b);
             break;
 
+        // Duplicate value on top of stack
         case INST_DUPL:
             if(vm->stack_size >= VM_STACK_CAPACITY - 1) {
                 return VM_STACK_OVERFLOW;
@@ -219,6 +265,7 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
             vm_push(vm, vm_peek(vm));
             break;
 
+        // Swap values on top of stack
         case INST_SWAP:
             if(vm->stack_size < 2) {
                 return VM_STACK_UNDERFLOW;
@@ -231,6 +278,7 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
             vm_push(vm, b);
             break;
 
+        // Rotate values on top of stack
         case INST_ROT:
             if(vm->stack_size < 3) {
                 return VM_STACK_UNDERFLOW;
@@ -239,6 +287,7 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
             vm_rot_stack(vm);
             break;
 
+        // Drop value at top of stack
         case INST_DROP:
             if(vm->stack_size < 1) {
                 return VM_STACK_UNDERFLOW;
@@ -247,6 +296,7 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
             vm_pop(vm);
             break;
     
+        // Print number at top of stack
         case INST_PRINT_NUM:
             if(vm->stack_size < 1) {
                 return VM_STACK_UNDERFLOW;
@@ -256,6 +306,7 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
 
             break;
 
+        // Print character represented by top of stack
         case INST_PRINT_CHAR:
             if(vm->stack_size < 1) {
                 return VM_STACK_UNDERFLOW;
@@ -266,10 +317,12 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
             putc((int)a, stdout);
             break;
 
+        // Print contents of the stack to stdout
         case INST_DUMP:
             vm_dump_stack(stdout, vm);
             break;
 
+        // Set memory address to top of stack
         case INST_MSET_ABS:
             if(vm->stack_size < 1) {
                 return VM_STACK_UNDERFLOW;
@@ -284,6 +337,7 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
 
             break;
 
+        // Push memory address to stack
         case INST_MGET_ABS:
             if(vm->stack_size >= VM_STACK_CAPACITY - 1) {
                 return VM_STACK_OVERFLOW;
@@ -296,6 +350,7 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
             vm_push(vm, vm->memory[inst.operand]);
             break;
 
+        // Compare values on top of stack
         case INST_CMP:
             if(vm->stack_size < 2) {
                 return VM_STACK_UNDERFLOW;
@@ -324,43 +379,53 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
 
             break;
 
+        // Jump to address
         case INST_JMP:
             vm->instruction_ptr = inst.operand;
 
             break;
 
+        // Jump if carry is set
         case INST_JC:
             if(vm->carry) vm->instruction_ptr = inst.operand;
             break;
 
+        // Jump if carry is not set
         case INST_JNC:
             if(!vm->carry) vm->instruction_ptr = inst.operand;
             break;
 
+        // Jump if equal is set
         case INST_JEQ:
             if(vm->equal) vm->instruction_ptr = inst.operand;
             break;
 
+        // Jump if equal is not set
         case INST_JNE:
             if(!vm->equal) vm->instruction_ptr = inst.operand;
             break;
 
+        // Jump if less is set
         case INST_JL:
             if(vm->less) vm->instruction_ptr = inst.operand;
             break;
 
+        // Jump if less or equal is set
         case INST_JLE:
             if(vm->less || vm->equal) vm->instruction_ptr = inst.operand;
             break;
         
+        // Jump if greater is set
         case INST_JG:
             if(vm->greater) vm->instruction_ptr = inst.operand;
             break;
 
+        // Jump if greater is not set
         case INST_JGE:
             if(vm->greater || vm->equal) vm->instruction_ptr = inst.operand;
             break;
 
+        // Set pointer to stack value
         case INST_SET_PTR:
             if(vm->stack_size < 2) {
                 return VM_STACK_UNDERFLOW;
@@ -372,6 +437,7 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
             vm->memory[b] = a;
             break;
 
+        // Push pointer dereference to stack
         case INST_GET_PTR:
             if(vm->stack_size < 1) {
                 return VM_STACK_UNDERFLOW;
@@ -381,6 +447,32 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
             vm_push(vm, vm->memory[a]);
             break;
 
+        case INST_CALL:
+            if(vm->call_stack_size >= VM_STACK_CAPACITY - 1) {
+                return VM_STACK_OVERFLOW;
+            }
+
+            vm_call_push(vm, vm->instruction_ptr);
+            vm->instruction_ptr = inst.operand;
+
+            break;
+
+        case INST_RETURN:
+            if(vm->call_stack_size < 1) {
+                return VM_STACK_UNDERFLOW;
+            }
+
+            vm->instruction_ptr = vm_call_pop(vm);
+            break; 
+
+        case INST_EXIT:
+            if(vm->stack_size < 1) {
+                exit(0);
+            } else {
+                exit(vm_pop(vm));
+            }
+
+        // Illegal operation - not caught by previous case statements
         default:
             return VM_ILLEGAL_INSTRUCTION;
     }
@@ -388,31 +480,47 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
     return VM_OK;
 }
 
+////////////////////////////////////////////////////////////////
+// Programs
+
 struct _program_t {
+    uint32_t magic;
     uint32_t num_instructions;
     instruction_t* instructions;
 };
 
 typedef struct _program_t program_t;
 
+// Load program from file
 program_t vm_read_file(const char* path, vm_t* vm) 
 {
     FILE* file = fopen(path, "rb");
 
+    // File open failed
     if(!file) {
         fprintf(stderr, "Error: Could not read file '%s'.\n", path);
         exit(EXIT_FAILURE);
     }
 
+    // Get size of file
     fseek(file, 0, SEEK_END);
     size_t size = ftell(file);
     fseek(file, 0, SEEK_SET);
 
+    // Initialize program and number of instructions
     program_t res;
+    fread(&res.magic, sizeof(int32_t), 1, file);
+
+    if(res.magic != 0x565343) {
+        fprintf(stderr, "Error: Invalid file format.\n");
+        exit(EXIT_FAILURE);
+    }
+
     fread(&res.num_instructions, sizeof(int32_t), 1, file);
 
     res.instructions = (instruction_t*)malloc(16 * res.num_instructions);
 
+    // Read instructions
     for(int i = 0; i < res.num_instructions; ++i) {
         instruction_t inst;
 
@@ -422,42 +530,63 @@ program_t vm_read_file(const char* path, vm_t* vm)
         res.instructions[i] = inst;
     }
 
+    // Get current location in file stream
     size_t cur = ftell(file);
 
+    // Get number of memory elements to read
     size_t bytes = size - cur;
     bytes /= sizeof(int32_t);
 
+    // Read preinitialized memory
     for(int i = 0; i < bytes; ++i) {
         fread(&vm->memory[i], sizeof(int32_t), 1, file);
     }
 
+    // Close file
     fclose(file);
 
+    // Return the program
     return res;
 }
 
+// Execute a program
 void vm_exec_program(vm_t* vm, program_t program) 
 {
+    // VM Status
     vm_error_status_type_t status;
 
+    // Iterate through the program
     while(vm->instruction_ptr < program.num_instructions) {
+        // Execute 1 instruction
         status = vm_exec(vm, program.instructions[vm->instruction_ptr]);
 
+        // Check for errors
         if(status == VM_STACK_OVERFLOW) {
             printf("Error: Stack overflow.\n");
             vm_dump_stack(stderr, vm);
+            vm_dump_call(stderr, vm);
             return;
-        } else if(status == VM_STACK_UNDERFLOW) {
+        } 
+        else if(status == VM_STACK_UNDERFLOW) {
             printf("Error: Stack underflow.\n");
             vm_dump_stack(stderr, vm);
+            vm_dump_call(stderr, vm);
             return;
-        } else if(status == VM_ILLEGAL_INSTRUCTION) {
-            printf("Error: Illegal instruction.\n");
+        } 
+        else if(status == VM_ILLEGAL_INSTRUCTION) {
+            printf("Error: Illegal instruction (%d, %ld).\n", program.instructions[vm->instruction_ptr - 1].type, program.instructions[vm->instruction_ptr - 1].operand);
             vm_dump_stack(stderr, vm);
+            vm_dump_call(stderr, vm);
             return;
         }
     }
 }
+
+////////////////////////////////////////////////////////////////
+// Main program
+
+// Global VM
+vm_t vm = {0};
 
 int main(int argc, char** argv) 
 {

@@ -46,6 +46,10 @@ class Inst(IntEnum):
     INST_SET_PTR = auto()
     INST_GET_PTR = auto()
 
+    INST_CALL = auto()
+    INST_RETURN = auto()
+    INST_EXIT = auto()
+
 def read_file(filename: str) -> str:
     contents = ""
 
@@ -61,6 +65,8 @@ def read_file(filename: str) -> str:
 
 def write_file(filename: str, program) -> None:
     new_path = str(pathlib.Path(filename).with_suffix(""))
+
+    program = [0x565343] + program
 
     with open(new_path, "wb") as f:
         arr = array.array("i")
@@ -172,6 +178,8 @@ class Lexer:
     def lex(self):
         tokens = []
 
+        print("Tokenizing input...")
+
         while self.is_not_empty():
             tokens.append(self.get_token())
 
@@ -180,6 +188,7 @@ class Lexer:
 class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
+        self.debug = False
 
         self.labels = {}
         self.index = 0
@@ -221,6 +230,10 @@ class Parser:
 
             "setptr": Inst.INST_SET_PTR,
             "getptr": Inst.INST_GET_PTR,
+
+            "call": Inst.INST_CALL,
+            "ret": Inst.INST_RETURN,
+            "exit": Inst.INST_EXIT,
         }
 
         self.op_count = {
@@ -258,6 +271,10 @@ class Parser:
 
             Inst.INST_SET_PTR: 0,
             Inst.INST_GET_PTR: 0,
+
+            Inst.INST_CALL: 1,
+            Inst.INST_RETURN: 0,
+            Inst.INST_EXIT: 0 
         }
 
     def is_not_empty(self):
@@ -281,10 +298,13 @@ class Parser:
 
                 if self.op_count[mapped] == 1:
                     self.index += 1
-                    return [int(mapped)-1] + self.parse_next()
+                    n = self.parse_next()
+                    if self.debug: print(mapped, n)
+                    return [int(mapped)-1] + n
 
                 else:
                     self.index += 1
+                    if self.debug: print(mapped)
                     return [int(mapped)-1, 0]
 
             elif tok_value in self.labels:
@@ -293,6 +313,12 @@ class Parser:
             elif tok_value == "memory":
                 (ntype, nval) = self.at()
 
+                if ntype == "Word":
+                    self.labels[nval] = len(self.memory)
+                    self.get_next_token()
+
+                    (ntype, nval) = self.at()
+                
                 while nval != "end":
                     self.memory += self.parse_next()
                     (ntype, nval) = self.at()
@@ -327,14 +353,18 @@ class Parser:
                     self.tokens.pop(i)
 
                     self.labels[name_value] = self.index
+                    # print(self.labels)
                     continue
 
             i += 1
 
     def parse(self):
         program = []
+        print("Parsing (Pass 1)...")
         self.get_labels()
+        # print(self.tokens)
 
+        print("Parsing (Pass 2)...")
         while self.is_not_empty():
             program += self.parse_next()
 
@@ -356,4 +386,5 @@ tokens = lexer.lex()
 parser = Parser(tokens)
 program = parser.parse()
 
+print("Writing Output...")
 write_file(sys.argv[1], program)

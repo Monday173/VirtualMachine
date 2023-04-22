@@ -1,11 +1,24 @@
-memory 
-    "Hello, World!\n"
+memory str1 
+    "String #1\n"
 end
 
-push 0
-mset 100
+memory str2
+    "String #2\n"
+end
 
-label print_lp
+label main
+    push str1
+    call puts
+
+    push str2
+    call puts
+
+    exit
+
+label puts
+    mset 100
+    jmp puts_lp
+label puts_lp
     mget 100
     getptr
 
@@ -13,7 +26,7 @@ label print_lp
     push 0
     cmp
 
-    je print_done
+    je puts_done
 
     mget 100
     push 1
@@ -21,8 +34,8 @@ label print_lp
     mset 100
 
     printc
-    jmp print_lp
+    jmp puts_lp
 
-label print_done
-
+label puts_done
+    ret
 
