@@ -53,7 +53,7 @@ struct _program_t {
 };
 ```
 
-***Instruction Format**
+***Instruction Format***
 ```c
 struct _instruction_t {
     uint32_t opcode;    // Each operation will have its own opcode, eg `0x000000` is `push` 
