@@ -59,18 +59,31 @@ def read_file(filename: str) -> str:
         for i, v in enumerate(lines):
             lines[i] = v.split(";")[0]
 
-    contents = "\n".join(lines)
+    contents = "\n".join(lines + ['\n'])
 
     return contents
 
 def write_file(filename: str, program) -> None:
     new_path = str(pathlib.Path(filename).with_suffix(""))
 
+    print(sys.byteorder)
+
+    tmp = array.array("I")
+    tmp.fromlist(program)
+
+    if sys.byteorder == "big":
+        tmp.byteswap()
+
+    program = tmp.tolist()
     program = [0x565343] + program
 
     with open(new_path, "wb") as f:
-        arr = array.array("i")
+        arr = array.array("I")
         arr.fromlist(program)
+
+        if sys.byteorder == "big":
+            arr.byteswap()
+
         arr.tofile(f)
 
 class Lexer:

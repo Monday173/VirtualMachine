@@ -10,7 +10,7 @@
 #define VM_MEMORY_CAPACITY 16777216
 
 // Typedefs
-typedef int64_t word;
+typedef int32_t word;
 
 ////////////////////////////////////////////////////////////////
 // Virtual Machine structure
@@ -138,7 +138,7 @@ void vm_dump_stack(FILE* stream, vm_t* vm)
 
     if(vm->stack_size > 0) {
         for(size_t i = vm->stack_size; i > 0; --i) {
-            fprintf(stream, "    %ld\n", vm->stack[i-1]);
+            fprintf(stream, "    %d\n", vm->stack[i-1]);
         }
     } else {
         fprintf(stream, "    [empty]\n");
@@ -151,7 +151,7 @@ void vm_dump_call(FILE* stream, vm_t* vm)
 
     if(vm->call_stack_size > 0) {
         for(size_t i = vm->call_stack_size; i > 0; --i) {
-            fprintf(stream, "    %ld\n", vm->call_stack[i-1]);
+            fprintf(stream, "    %d\n", vm->call_stack[i-1]);
         }
     } else {
         fprintf(stream, "    [empty]\n");
@@ -302,7 +302,7 @@ vm_error_status_type_t vm_exec(vm_t* vm, instruction_t inst)
                 return VM_STACK_UNDERFLOW;
             }
 
-            printf("%ld\n", vm_pop(vm));
+            printf("%d\n", vm_pop(vm));
 
             break;
 
@@ -574,7 +574,7 @@ void vm_exec_program(vm_t* vm, program_t program)
             return;
         } 
         else if(status == VM_ILLEGAL_INSTRUCTION) {
-            printf("Error: Illegal instruction (%d, %ld).\n", program.instructions[vm->instruction_ptr - 1].type, program.instructions[vm->instruction_ptr - 1].operand);
+            printf("Error: Illegal instruction (%d, %d).\n", program.instructions[vm->instruction_ptr - 1].type, program.instructions[vm->instruction_ptr - 1].operand);
             vm_dump_stack(stderr, vm);
             vm_dump_call(stderr, vm);
             return;
