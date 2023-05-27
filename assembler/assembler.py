@@ -66,8 +66,6 @@ def read_file(filename: str) -> str:
 def write_file(filename: str, program) -> None:
     new_path = str(pathlib.Path(filename).with_suffix(""))
 
-    print(sys.byteorder)
-
     tmp = array.array("I")
     tmp.fromlist(program)
 
